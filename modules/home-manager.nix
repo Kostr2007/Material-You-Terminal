@@ -302,10 +302,25 @@ in
 
     fastfetch = {
       logoAnimation = {
-        enable = mkEnableOption "a Material You highlight sweeping across the NixOS snowflake";
+        backend = mkOption {
+          type = types.enum [ "auto" "kitty" "ansi" ];
+          default = "auto";
+          description = "Auto uses native animation in kitty and ANSI elsewhere. Native idle needs kitty.";
+        };
+        idle = mkOption {
+          type = types.bool;
+          default = true;
+          description = "Keep breathing and shimmering after the entrance; kitty runs this loop itself.";
+        };
+        idlePeriodMs = mkOption {
+          type = types.ints.between 1000 12000;
+          default = 4800;
+          description = "Duration of the seamless idle loop in milliseconds.";
+        };
+        enable = mkEnableOption "a growing NixOS crystal with a terminal-owned idle animation";
         durationMs = mkOption {
           type = types.ints.between 0 5000;
-          default = 1100;
+          default = 1400;
           description = "Logo entrance duration in milliseconds; 0 shows a static card.";
         };
         fps = mkOption {

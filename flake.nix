@@ -58,7 +58,7 @@
 
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
-          packages = with pkgs; [ python3 matugen kitty fish starship fastfetch nixpkgs-fmt ];
+          packages = with pkgs; [ (python3.withPackages (ps: [ ps.pillow ])) matugen kitty fish starship fastfetch nixpkgs-fmt ];
         };
       });
     };

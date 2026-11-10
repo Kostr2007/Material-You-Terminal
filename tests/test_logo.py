@@ -22,7 +22,7 @@ spec.loader.exec_module(myt)
 CARD = "\x1b[1m\x1b[31m  ▟███▛    host@example\x1b[0m\n  ▜███▙    OS: NixOS\n"
 
 
-class LogoTests(unittest.TestCase):
+class LogoHarness:
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -34,7 +34,7 @@ class LogoTests(unittest.TestCase):
         self.config = root / "config.json"
         self.config.write_text(json.dumps({"themeDir": str(root), "logoAnimation": {"fps": 60}}))
         self.env = {**os.environ, "TERM": "xterm-kitty"}
-        for key in ("NO_COLOR", "MYT_NO_ANIMATION"):
+        for key in ("NO_COLOR", "MYT_NO_ANIMATION", "KITTY_WINDOW_ID", "TMUX", "STY"):
             self.env.pop(key, None)
 
     def launch(self, rows=30, columns=100, duration=70, extra_env=None, data=CARD):
@@ -68,6 +68,8 @@ class LogoTests(unittest.TestCase):
         self.assertEqual(error, "")
         return b"".join(chunks).decode().replace("\r\n", "\n")
 
+
+class LogoTests(LogoHarness, unittest.TestCase):
     def test_pipe_is_exact_passthrough_without_palette(self):
         self.config.write_text("{}")
         result = subprocess.run([sys.executable, str(CLI), "--config", str(self.config), "logo"],

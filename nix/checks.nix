@@ -50,7 +50,7 @@ let
   '';
 in
 {
-  logo = pkgs.runCommandLocal "myt-check-logo" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+  logo = pkgs.runCommandLocal "myt-check-logo" { nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pillow ])) ]; } ''
     cp -r ${../cli} cli
     cp -r ${../tests} tests
     python3 -m unittest discover -s tests -v

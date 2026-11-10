@@ -6,7 +6,8 @@ it into kitty, fish, starship and fastfetch configs. At runtime it can re-theme
 everything from a wallpaper and smoothly morph the colors of running kitty
 windows.
 
-Only the Python standard library is used.
+Core theming uses the Python standard library. Native kitty logo motion and
+its preview studio additionally use Pillow (bundled by the Nix package).
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ import time
 import unicodedata
 from pathlib import Path
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 APP = "material-you-terminal"
 
 # Base hues for the 16 terminal colors. matugen harmonizes ("blends") them
@@ -659,17 +660,58 @@ def logo_frame(data: str, palette: dict, progress: float, width: int) -> str:
     return "\n".join(lines) + "\n"
 
 
+def native_logo_layout(data, width):
+    """Reserve exactly the original snowflake cells, keeping the card untouched."""
+    positions = []
+    blank = []
+    for y, line in enumerate(data.splitlines(keepends=True)):
+        x = 0
+        for token in DISPLAY_TOKEN.findall(line):
+            if token.startswith("\x1b["):
+                if token.endswith("G"):
+                    x = max(0, int(token[2:-1] or "1") - 1)
+                blank.append(token)
+                continue
+            if x < width and token in NIXOS_BLOCKS:
+                positions.append((x, y))
+                blank.append(" ")
+            else:
+                blank.append(token)
+            x += cell_width(token)
+    if not positions:
+        return None, data
+    left, top = min(x for x, y in positions), min(y for x, y in positions)
+    right, bottom = max(x for x, y in positions), max(y for x, y in positions)
+    text = "".join(blank)
+    return (left, top, right-left+1, bottom-top+1), text + ("" if text.endswith("\n") else "\n")
+
+
+def cmd_logo_preview(cfg, args):
+    try:
+        from myt_logo import export_studio
+    except ImportError as exc:
+        raise MytError("logo-preview requires Pillow; use the Nix package or nix develop") from exc
+    settings = cfg.get("logoAnimation", {})
+    metrics = export_studio(_palette_for_display(cfg), settings, args.out)
+    print(json.dumps(metrics, indent=2))
+    print(Path(args.out).resolve() / "index.html")
+    return 0 if all(metrics[k] for k in ("endpointEqual", "handoffEqual", "seamWithinMotion")) else 1
+
+
 def cmd_logo(cfg: dict, args) -> int:
-    """Animate a piped fastfetch NixOS card, then leave its original final frame."""
+    """Grow a native NixOS crystal, or animate an ANSI fastfetch card."""
     if sys.stdin.isatty():
         raise MytError("usage: fastfetch --logo nixos --pipe false | myt logo")
     data = sys.stdin.read()
     settings = cfg.get("logoAnimation", {})
-    duration_ms = args.duration if args.duration is not None else settings.get("durationMs", 1100)
+    duration_ms = args.duration if args.duration is not None else settings.get("durationMs", 1400)
     fps = settings.get("fps", 30)
     width = settings.get("width", 50)
     if not 0 <= duration_ms <= 5000 or not 1 <= fps <= 60 or not 1 <= width <= 200:
         raise MytError("logo animation requires duration 0..5000 ms, fps 1..60, width 1..200")
+    backend = settings.get("backend", "auto")
+    if backend not in ("auto", "kitty", "ansi") or not 1000 <= settings.get("idlePeriodMs", 4800) <= 12000:
+        raise MytError("logo backend must be auto/kitty/ansi; idle period must be 1000..12000 ms")
     lines = data.splitlines()
     size = shutil.get_terminal_size((80, 24))
     # Cursor movement is safe only when the whole card fits without wrapping or
@@ -687,6 +729,33 @@ def cmd_logo(cfg: dict, args) -> int:
     palette = _palette_for_display(cfg)
     palette.setdefault("surface_container_highest", palette.get("surface", "#202020"))
     out = sys.stdout
+    native = backend == "kitty" or (backend == "auto" and os.environ.get("KITTY_WINDOW_ID")
+                                      and os.environ.get("TERM") == "xterm-kitty"
+                                      and not os.environ.get("TMUX") and not os.environ.get("STY"))
+    if native:
+        try:
+            from myt_logo import play
+        except ImportError as exc:
+            if backend == "kitty":
+                raise MytError("kitty logo requires Pillow; use the Nix package or nix develop") from exc
+        else:
+            box, blank_card = native_logo_layout(data, width)
+            previous_term = signal.getsignal(signal.SIGTERM)
+
+            def stop_native(_signum, _frame):
+                raise KeyboardInterrupt
+
+            signal.signal(signal.SIGTERM, stop_native)
+            try:
+                out.write("\x1b[?25l")
+                play(out, palette, {**settings, "durationMs": duration_ms}, box,
+                     len(lines), blank_card, data + ("" if data.endswith("\n") else "\n"),
+                     size, lambda: shutil.get_terminal_size((80, 24)))
+            finally:
+                out.write(RESET + "\x1b[?25h")
+                out.flush()
+                signal.signal(signal.SIGTERM, previous_term)
+            return 0
     rewind = f"\r\x1b[{len(lines)}A"
     drawn = False
     resized = False
@@ -945,7 +1014,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("command", nargs=argparse.REMAINDER)
     p.set_defaults(func=cmd_reveal)
 
-    p = sub.add_parser("logo", help="animate a piped fastfetch NixOS snowflake in Material You colors")
+    p = sub.add_parser("logo-preview", help="export an interactive motion studio, GIFs and quality metrics")
+    p.add_argument("--out", type=Path, default=Path("logo-preview"))
+    p.set_defaults(func=cmd_logo_preview)
+
+    p = sub.add_parser("logo", help="grow a NixOS crystal, then leave a native kitty idle animation")
     p.add_argument("--duration", type=int, help="milliseconds (0 disables animation, maximum 5000)")
     p.set_defaults(func=cmd_logo)
 
