@@ -50,6 +50,12 @@ let
   '';
 in
 {
+  logo = pkgs.runCommandLocal "myt-check-logo" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+    cp -r ${../cli} cli
+    cp -r ${../tests} tests
+    python3 -m unittest discover -s tests -v
+    touch $out
+  '';
   package = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
   dark = validate "dark" (mkTheme { });
   light = validate "light" (mkTheme { mode = "light"; source.color = "#B3261E"; scheme = "scheme-expressive"; });

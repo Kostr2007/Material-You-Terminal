@@ -25,6 +25,7 @@ import sys
 import tempfile
 import threading
 import time
+import unicodedata
 from pathlib import Path
 
 VERSION = "1.0.0"
@@ -608,6 +609,116 @@ def cmd_reveal(cfg: dict, args) -> int:
     return rc
 
 
+# Only snowflake block glyphs in the left logo column are animated. The original
+# fastfetch bytes are retained for the final frame, including its card and colors.
+DISPLAY_TOKEN = re.compile(r"\x1b\[[0-9;:]*m|\x1b\[[0-9]*G|[^\x1b]", re.DOTALL)
+NIXOS_BLOCKS = frozenset("▗▄▖▜█▙▟▛▝▀▘")
+
+
+def cell_width(text: str) -> int:
+    column = maximum = 0
+    for token in DISPLAY_TOKEN.findall(text):
+        if token.startswith("\x1b["):
+            if token.endswith("G"):
+                column = max(0, int(token[2:-1] or "1") - 1)
+        else:
+            column += (0 if unicodedata.combining(token) else
+                       2 if unicodedata.east_asian_width(token) in ("W", "F") else 1)
+        maximum = max(maximum, column)
+    return maximum
+
+
+def logo_frame(data: str, palette: dict, progress: float, width: int) -> str:
+    """Sweep a Material highlight across the existing NixOS snowflake."""
+    lines = []
+    for y, line in enumerate(data.splitlines()):
+        x = 0
+        style = ""
+        rendered = []
+        for token in DISPLAY_TOKEN.findall(line):
+            if token.startswith("\x1b["):
+                if token.endswith("G"):
+                    x = max(0, int(token[2:-1] or "1") - 1)
+                else:
+                    style = token if token in ("\x1b[m", "\x1b[0m") else style + token
+                rendered.append(token)
+                continue
+            if x < width and token in NIXOS_BLOCKS:
+                position = (x + y * 0.7) / (width + 16)
+                front = progress * 1.7 - 0.25
+                settled = max(0.0, min(1.0, (front - position) * 5 + 0.5))
+                target = palette["primary"] if x < width / 2 else palette["tertiary"]
+                color = mix(palette["surface_container_highest"], target, settled)
+                glow = math.exp(-((position - front) / 0.13) ** 2)
+                color = mix(color, palette["on_surface"], glow * 0.8)
+                rendered.append(_fg(color) + token + RESET + style)
+            else:
+                rendered.append(token)
+            x += cell_width(token)
+        lines.append("".join(rendered))
+    return "\n".join(lines) + "\n"
+
+
+def cmd_logo(cfg: dict, args) -> int:
+    """Animate a piped fastfetch NixOS card, then leave its original final frame."""
+    if sys.stdin.isatty():
+        raise MytError("usage: fastfetch --logo nixos --pipe false | myt logo")
+    data = sys.stdin.read()
+    settings = cfg.get("logoAnimation", {})
+    duration_ms = args.duration if args.duration is not None else settings.get("durationMs", 1100)
+    fps = settings.get("fps", 30)
+    width = settings.get("width", 50)
+    if not 0 <= duration_ms <= 5000 or not 1 <= fps <= 60 or not 1 <= width <= 200:
+        raise MytError("logo animation requires duration 0..5000 ms, fps 1..60, width 1..200")
+    lines = data.splitlines()
+    size = shutil.get_terminal_size((80, 24))
+    # Cursor movement is safe only when the whole card fits without wrapping or
+    # scrolling. Noninteractive output is a byte-for-byte text passthrough.
+    animate = (anim_enabled(cfg) and settings.get("enable", True)
+               and os.environ.get("TERM") != "dumb" and duration_ms > 0
+               and 0 < len(lines) < size.lines
+               and all(cell_width(line) < size.columns for line in lines)
+               and any(c in NIXOS_BLOCKS for line in lines
+                       for c in re.sub(r"\x1b\[[0-9;:]*m", "", line)[:width])
+               and not re.search(r"\x1b(?!\[[0-9;:]*m|\[[0-9]*G)", data))
+    if not animate:
+        sys.stdout.write(data)
+        return 0
+    palette = _palette_for_display(cfg)
+    palette.setdefault("surface_container_highest", palette.get("surface", "#202020"))
+    out = sys.stdout
+    rewind = f"\r\x1b[{len(lines)}A"
+    drawn = False
+    resized = False
+    previous_term = signal.getsignal(signal.SIGTERM)
+
+    def interrupted(_signum, _frame):
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, interrupted)
+    out.write("\x1b[?25l")
+    try:
+        start = time.monotonic()
+        while True:
+            progress = (time.monotonic() - start) / (duration_ms / 1000)
+            resized = shutil.get_terminal_size((80, 24)) != size
+            if progress >= 1 or resized:
+                break
+            out.write((rewind if drawn else "") + logo_frame(data, palette, progress, width))
+            drawn = True
+            out.flush()
+            time.sleep(1 / fps)
+    finally:
+        # A resize may have reflowed the old frame: do not rewind into history.
+        out.write((rewind if drawn and not resized else "\r" if resized else "") + data)
+        if not data.endswith("\n"):
+            out.write("\n")
+        out.write(RESET + "\x1b[?25h")
+        out.flush()
+        signal.signal(signal.SIGTERM, previous_term)
+    return 0
+
+
 def cmd_palette(cfg: dict, args) -> None:
     p = _palette_for_display(cfg)
     groups = [
@@ -833,6 +944,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--stagger", type=int, default=14, help="milliseconds per line")
     p.add_argument("command", nargs=argparse.REMAINDER)
     p.set_defaults(func=cmd_reveal)
+
+    p = sub.add_parser("logo", help="animate a piped fastfetch NixOS snowflake in Material You colors")
+    p.add_argument("--duration", type=int, help="milliseconds (0 disables animation, maximum 5000)")
+    p.set_defaults(func=cmd_logo)
 
     p = sub.add_parser("status", help="show what is active")
     p.add_argument("--json", action="store_true")

@@ -44,7 +44,7 @@ with smooth animations. Ships as a Nix flake (home-manager and NixOS modules).*
     home-manager.url = "github:nix-community/home-manager";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
 
-    material-you-terminal.url = "github:kostr2007/Fish-starship-Material-You-addon";
+    material-you-terminal.url = "github:Kostr2007/Material-You-Terminal";
     material-you-terminal.inputs.nixpkgs.follows = "nixpkgs";
   };
 }
@@ -204,3 +204,47 @@ nix develop                      # python, matugen, kitty, fish, starship, fastf
 ## Лицензия
 
 MIT
+
+
+## Анимированный логотип NixOS
+
+Световая волна проявляет снежинку рядом с карточкой fastfetch и оставляет исходный
+статичный кадр. Цвета берутся из текущей палитры Material You, в том числе после
+`myt apply`. Используются обычные символы и ANSI: GIF, ImageMagick и графические
+протоколы терминала не требуются. Это короткая анимация приветствия, после неё
+сразу доступен промпт.
+
+```nix
+programs.material-you-terminal = {
+  enable = true;
+  fastfetch.logo = "nixos";
+  fastfetch.logoAnimation = {
+    enable = true;
+    durationMs = 1100; # 0..5000, 0 — статичный вывод
+    fps = 30;         # 1..60
+    width = 50;       # область логотипа с левым отступом
+  };
+  fish.greeting = "fastfetch"; # либо "both" для волны-разделителя перед карточкой
+};
+```
+
+Если `fish_greeting` задан вручную, замените его конвейер `| myt reveal` на:
+
+```fish
+fastfetch --config $__myt_theme_dir/fastfetch.jsonc --pipe false | myt logo
+```
+
+`myt logo --duration 1600` меняет длительность разового запуска. Обычный `fastfetch`
+сохраняет стандартное поведение. При изменении отступов логотипа настройте `width`,
+чтобы область подсветки не заходила на карточку. Опция рассчитана на встроенный
+логотип `nixos`; не переопределяйте его тип/источник через `fastfetch.settings.logo`.
+
+`animations.enable = false`, `MYT_NO_ANIMATION=1`, `NO_COLOR=1` или `TERM=dumb`
+отключают перерисовку. При перенаправлении вывода и в окне, куда карточка целиком
+не помещается, входной текст проходит без изменений. `NO_COLOR` отключает эту
+анимацию; цвета самого fastfetch задаются его параметрами. Ctrl+C и SIGTERM
+оставляют исходную карточку и возвращают видимый курсор. При изменении размера
+окна анимация завершается.
+
+Исследование и выбор подхода: [план и источники](docs/nixos-logo-plan.md).
+Проверки: `python3 -m unittest discover -s tests -v` и `nix build .#checks.x86_64-linux.logo`.

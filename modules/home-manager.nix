@@ -38,6 +38,7 @@ let
     seedDir = "${theme}";
     matugen = lib.getExe pkgs.matugen;
     animations = anim;
+    logoAnimation = cfg.fastfetch.logoAnimation;
     hooks = cfg.dynamic.hooks;
     kitty = {
       socketGlob = "\${XDG_RUNTIME_DIR}/kitty-myt-*";
@@ -56,7 +57,8 @@ let
   # fish runs fastfetch itself (so it detects the right shell) and myt only
   # animates the output.
   fastfetchGreeting =
-    if anim then "${fastfetchCmd} --pipe false | myt reveal" else fastfetchCmd;
+    if cfg.fastfetch.logoAnimation.enable then "${fastfetchCmd} --pipe false | myt logo"
+    else if anim then "${fastfetchCmd} --pipe false | myt reveal" else fastfetchCmd;
 
   greeting = {
     none = "";
@@ -299,6 +301,24 @@ in
     };
 
     fastfetch = {
+      logoAnimation = {
+        enable = mkEnableOption "a Material You highlight sweeping across the NixOS snowflake";
+        durationMs = mkOption {
+          type = types.ints.between 0 5000;
+          default = 1100;
+          description = "Logo entrance duration in milliseconds; 0 shows a static card.";
+        };
+        fps = mkOption {
+          type = types.ints.between 1 60;
+          default = 30;
+          description = "Maximum logo animation frame rate.";
+        };
+        width = mkOption {
+          type = types.ints.between 1 200;
+          default = 50;
+          description = "Logo column width including left padding; increase for custom padding.";
+        };
+      };
       enable = mkOption {
         type = types.bool;
         default = true;
@@ -330,6 +350,11 @@ in
         inherit theme;
         colors = (lib.importJSON "${theme}/palette.json").colors;
       };
+
+      assertions = [{
+        assertion = !cfg.fastfetch.logoAnimation.enable || (cfg.fastfetch.enable && cfg.fastfetch.logo == "nixos");
+        message = "material-you-terminal: fastfetch.logoAnimation requires fastfetch.enable and fastfetch.logo = \"nixos\".";
+      }];
 
       home.packages = [ myt ] ++ lib.optional (cfg.font.package != null) cfg.font.package;
       fonts.fontconfig.enable = mkDefault true;
