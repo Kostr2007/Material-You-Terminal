@@ -29,7 +29,7 @@ import time
 import unicodedata
 from pathlib import Path
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 APP = "material-you-terminal"
 
 # Base hues for the 16 terminal colors. matugen harmonizes ("blends") them
@@ -739,7 +739,15 @@ def cmd_logo(cfg: dict, args) -> int:
             if backend == "kitty":
                 raise MytError("kitty logo requires Pillow; use the Nix package or nix develop") from exc
         else:
+            from myt_card import align_card
             box, blank_card = native_logo_layout(data, width)
+            blank_card, box = align_card(blank_card, box, size.columns,
+                                         settings.get("verticalAlign", "center"),
+                                         settings.get("horizontalAlign", "left"))
+            native_lines = len(blank_card.splitlines())
+            if native_lines >= size.lines:
+                out.write(data)
+                return 0
             previous_term = signal.getsignal(signal.SIGTERM)
 
             def stop_native(_signum, _frame):
@@ -749,7 +757,7 @@ def cmd_logo(cfg: dict, args) -> int:
             try:
                 out.write("\x1b[?25l")
                 play(out, palette, {**settings, "durationMs": duration_ms}, box,
-                     len(lines), blank_card, data + ("" if data.endswith("\n") else "\n"),
+                     native_lines, blank_card, data + ("" if data.endswith("\n") else "\n"),
                      size, lambda: shutil.get_terminal_size((80, 24)))
             finally:
                 out.write(RESET + "\x1b[?25h")

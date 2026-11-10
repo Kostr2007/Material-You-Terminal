@@ -215,6 +215,15 @@ MIT
 ![Рост снежинки](docs/screenshots/nixos-growth.gif)
 ![Постоянный цикл](docs/screenshots/nixos-idle.gif)
 
+Снежинка и текст выровнены по вертикальному центру с сохранением размера логотипа.
+Одновременно с ростом кристалла проявляется заголовок, разворачивается разделитель,
+появляются строки сводки, заполняются индикаторы и каскадом раскрывается палитра.
+Вся заставка занимает те же 1400 мс; перед появлением промпта текст получает
+исходные значения и цвета. Для возврата исходного выравнивания задайте
+`verticalAlign = "original"`, для отключения хореографии — `cardAnimation = false`.
+
+![Единая заставка карточки](docs/screenshots/card-entrance.gif)
+
 В kitty кадры загружаются в графический протокол терминала: **после заставки
 `myt` завершается**, промпт сразу работает, цикл проигрывает сам kitty. Отдельного
 фонового процесса, который двигает курсор или пишет поверх команд, нет. Изображение
@@ -228,6 +237,9 @@ programs.material-you-terminal = {
   fastfetch.logoAnimation = {
     enable = true;
     backend = "auto";      # kitty автоматически; также "kitty" или "ansi"
+    verticalAlign = "center"; # центры снежинки и сводки на одной высоте
+    horizontalAlign = "left"; # "center" — весь блок по центру окна
+    cardAnimation = true;  # единое появление заголовка, строк, полос и палитры
     durationMs = 1400;     # заставка, 0..5000; 0 — обычная статичная карточка
     idle = true;          # постоянный цикл в kitty
     idlePeriodMs = 4800;  # спокойный цикл, 1000..12000
@@ -274,6 +286,9 @@ myt logo-preview --out ./logo-preview
 nix develop
 python tools/logo_studio.py --out ./logo-preview/dark
 python tools/logo_studio.py --light --out ./logo-preview/light
+# Полная композиция, включая текст, полосы и палитру:
+python tools/card_studio.py --out ./logo-preview/card
+python tools/card_studio.py --light --horizontal center --out ./logo-preview/card-light
 ```
 
 Откройте созданный `index.html`: есть воспроизведение заставки с переходом в цикл,
@@ -281,6 +296,7 @@ python tools/logo_studio.py --light --out ./logo-preview/light
 GIF обеих фаз, лист ключевых кадров и `metrics.json` с проверками переходов.
 Студия использует **тот же рендерер**, что и терминал.
 
+- `tools/card_studio.py` экспортирует заставку всей композиции и ключевые кадры; проверяет вертикальные центры. Нужны fastfetch и fontconfig для реального текста и шрифта.
 - `tools/generate_logo_mask.py` воспроизводит SVG и маску из канонической геометрии NixOS.
 - `tools/logo_studio.py` проверяет совпадение конечных кадров, переход к циклу и величину скачка на шве; при нарушении завершает работу с ошибкой.
 - `tools/kitty_smoke.py --out ./logo-preview/kitty` открывает отдельное тестовое окно, сравнивает снимки постоянного цикла, вводит команду в fish и закрывает своё окно. Нужны графическая сессия X11, kitty, fish, fastfetch, xdotool и ImageMagick; они нужны только этому тесту.
@@ -288,3 +304,5 @@ GIF обеих фаз, лист ключевых кадров и `metrics.json` 
 
 [План, источники и проверка](docs/nixos-logo-plan.md) ·
 [Атрибуция логотипа и лицензия CC BY 4.0](cli/assets/ATTRIBUTION.md).
+
+План обновления карточки: [центрирование и согласованная заставка](docs/card-motion-plan.md).

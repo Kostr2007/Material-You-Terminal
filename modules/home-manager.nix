@@ -302,6 +302,21 @@ in
 
     fastfetch = {
       logoAnimation = {
+        cardAnimation = mkOption {
+          type = types.bool;
+          default = true;
+          description = "Coordinate the header, rows, bars and palette entrance with the growing crystal.";
+        };
+        verticalAlign = mkOption {
+          type = types.enum [ "center" "original" ];
+          default = "center";
+          description = "Center the snowflake and text card vertically without shrinking the logo.";
+        };
+        horizontalAlign = mkOption {
+          type = types.enum [ "left" "center" ];
+          default = "left";
+          description = "Align the complete logo and system summary within the terminal width.";
+        };
         backend = mkOption {
           type = types.enum [ "auto" "kitty" "ansi" ];
           default = "auto";

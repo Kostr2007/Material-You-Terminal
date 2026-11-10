@@ -41,11 +41,18 @@ with tempfile.TemporaryDirectory(prefix='myt-kitty-') as tmp:
         return subprocess.check_output(['kitty','@','--to',socket,*parts],stderr=subprocess.DEVNULL,text=True,env=env)
     try:
         deadline=time.monotonic()+25
+        entrance_captured=False
         while True:
             try:
                 text=remote('get-text')
                 if 'MOTION_READY>' in text:
                     break
+                if text.strip() and not entrance_captured:
+                    window=subprocess.check_output(['xdotool','search','--class',window_class],text=True).splitlines()[-1]
+                    subprocess.run(['import','-window',window,str(args.out/'entrance-early.png')],check=True)
+                    time.sleep(.35)
+                    subprocess.run(['import','-window',window,str(args.out/'entrance-middle.png')],check=True)
+                    entrance_captured=True
             except subprocess.CalledProcessError:
                 pass
             if proc.poll() is not None or time.monotonic()>deadline:

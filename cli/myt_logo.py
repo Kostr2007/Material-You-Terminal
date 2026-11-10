@@ -150,16 +150,28 @@ def play(out, palette, settings, box, line_count, blank_card, original, terminal
         duration = settings.get("durationMs", 1400)
         intro = encoded_frames(renderer, "intro", intro_count)
         idle = encoded_frames(renderer, "idle", idle_count) if settings.get("idle", True) else []
-        out.write(blank_card + anchor)
+        from myt_card import frame as card_frame
+        animate_card = settings.get("cardAnimation", True)
+        out.write((card_frame(blank_card, 0, palette) if animate_card else blank_card) + anchor)
         placed = True
         out.write(upload(intro, image_id, columns, rows, max(1, round(duration / intro_count))))
         out.write(command(f"a=a,i={image_id},s=2,c=1,q=2") + restore)
         out.flush()
         start = time.monotonic()
+        next_frame = start
         while time.monotonic() - start < duration / 1000:
             if get_size() != terminal_size:
                 return False
-            time.sleep(min(0.025, max(0, duration/1000 - (time.monotonic()-start))))
+            now = time.monotonic()
+            if animate_card and now >= next_frame:
+                progress = min(1, (now-start)/(duration/1000))
+                out.write(f"\r\x1b[{line_count}A" + card_frame(blank_card, progress, palette))
+                out.flush()
+                next_frame = now + 1/settings.get("fps", 30)
+            time.sleep(min(0.015, max(0, duration/1000 - (time.monotonic()-start))))
+        if animate_card:
+            out.write(f"\r\x1b[{line_count}A" + blank_card)
+            out.flush()
         if idle:
             out.write(anchor + upload(idle, idle_id, columns, rows,
                                       max(1, round(settings.get("idlePeriodMs", 4800) / idle_count))))

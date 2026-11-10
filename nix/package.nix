@@ -11,7 +11,7 @@ let
 in
 stdenvNoCC.mkDerivation {
   pname = "material-you-terminal";
-  version = "1.1.0";
+  version = "1.2.0";
 
   src = lib.fileset.toSource {
     root = ../.;
@@ -27,6 +27,7 @@ stdenvNoCC.mkDerivation {
     runHook preInstall
     install -Dm644 cli/myt.py $out/libexec/myt.py
     install -Dm644 cli/myt_logo.py $out/libexec/myt_logo.py
+    install -Dm644 cli/myt_card.py $out/libexec/myt_card.py
     cp -r cli/assets $out/libexec/assets
     mkdir -p $out/share/material-you-terminal
     cp -r templates $out/share/material-you-terminal/templates
